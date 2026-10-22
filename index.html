@@ -8,7 +8,7 @@
 </style>
 </head>
 <body><main class="shell">
-<header><div class="brand"><div class="logo">🎁</div><div><strong>AUREON BRINDES</strong><small>INTELIGÊNCIA DE CUSTOS</small></div></div><div class="actions"><button class="btn secondary" id="exportCSV">⬇ Exportar CSV</button><button class="btn secondary" id="backup">Backup JSON</button><button class="btn secondary" id="importBtn">Importar backup</button><input type="file" id="importFile" accept=".json,application/json" class="hidden"></div></header>
+<header><div class="brand"><div class="logo">🎁</div><div><strong>AUREON BRINDES</strong><small>INTELIGÊNCIA DE CUSTOS</small></div></div><div class="actions"><button class="btn" id="importTS">📂 Importar TSExplorer CSV</button><input type="file" id="tsFile" accept=".csv,text/csv" class="hidden"><button class="btn secondary" id="exportCSV">⬇ Exportar CSV</button><button class="btn secondary" id="backup">Backup JSON</button><button class="btn secondary" id="importBtn">Importar backup</button><input type="file" id="importFile" accept=".json,application/json" class="hidden"></div></header>
 <h1>Controle de brindes e parcerias</h1><p class="sub">Saiba quanto você investe por estabelecimento, captador, mês e categoria.</p>
 <div class="notice">Versão inicial: os registros são armazenados somente neste navegador/dispositivo. GitHub Pages não funciona como banco de dados. Para compartilhar os mesmos dados entre vários usuários, é necessária a integração com Supabase e autenticação.</div>
 <div class="pillnav"><button data-tab="painel" class="active">📊 Painel</button><button data-tab="lancar">➕ Lançar custo</button><button data-tab="parceiros">🏪 Estabelecimentos</button><button data-tab="captadores">👥 Captadores</button></div>
@@ -74,6 +74,64 @@ $('backup').onclick=()=>download('aureon-brindes-backup-'+new Date().toISOString
 $('exportCSV').onclick=()=>{const rows=[['Data','Estabelecimento','Captador','Equipe','Categoria','Descrição','Quantidade','Valor unitário','Total','Situação'],...filtered().map(c=>[c.date,nameOf('partners',c.partnerId),nameOf('captadores',c.captadorId),data.captadores.find(x=>x.id===c.captadorId)?.team||'',c.category,c.description,c.qty,c.unit,c.qty*c.unit,c.status])];download('aureon-brindes-'+($('month').value||'todos')+'.csv','\ufeff'+rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n'),'text/csv;charset=utf-8')};
 $('importBtn').onclick=()=>$('importFile').click();
 $('importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{const p=JSON.parse(await file.text());if(!p||!['partners','captadores','costs'].every(k=>Array.isArray(p[k])))throw Error('Formato inválido');if(!confirm('Este backup substituirá TODOS os dados locais atuais. Continuar?'))return;data=p;save()}catch(err){alert('Arquivo de backup inválido: '+err.message)}e.target.value=''};
+
+$('importTS').onclick=()=>$('tsFile').click();
+$('tsFile').onchange=async e=>{
+const file=e.target.files[0];if(!file)return;
+try{
+const buffer=await file.arrayBuffer();
+const decoder=new TextDecoder('windows-1252');
+const raw=decoder.decode(buffer);
+function parseCSV(text){
+const out=[];let row=[],field='',quoted=false;
+for(let i=0;i<text.length;i++){
+const ch=text[i];
+if(ch==='"'){if(quoted&&text[i+1]==='"'){field+='"';i++}else quoted=!quoted}
+else if(ch===';'&&!quoted){row.push(field);field=''}
+else if((ch==='\n'||ch==='\r')&&!quoted){if(ch==='\r'&&text[i+1]==='\n')i++;row.push(field);out.push(row);row=[];field=''}
+else field+=ch;
+}
+if(field||row.length){row.push(field);out.push(row)}
+return out;
+}
+const rows=parseCSV(raw);const header=rows.findIndex(r=>r[0]?.trim()==='Data de atendimento'&&r.includes('Brindes efetivos'));
+if(header<0)throw Error('Não encontrei o cabeçalho do relatório Controle de sala / Brindes efetivos.');
+const fields=rows[header],col=n=>fields.indexOf(n),dateIx=col('Data de atendimento'),capIx=col('Promotor de marketing'),giftIx=col('Brindes efetivos'),locIx=col('Local Captação');
+if([dateIx,capIx,giftIx].some(x=>x<0))throw Error('Faltam colunas obrigatórias.');
+const fragments=/\[DESCRIÇÃO:\s*(.*?)\s*-\s*QTD\.:\s*(\d+)\s*-\s*VALOR:\s*([\d.,]+)\s*\]/g;
+const parsed=[];let failures=0,skipped=0;
+for(let i=header+1;i<rows.length;i++){
+const r=rows[i],dt=(r[dateIx]||'').trim(),m=/^(\d{2})\/(\d{2})\/(\d{4})$/.exec(dt);
+if(!m){skipped++;continue}
+const iso=m[3]+'-'+m[2]+'-'+m[1],cap=(r[capIx]||'').trim(),g=(r[giftIx]||'').trim();
+if(!g){skipped++;continue}
+const extracted=[...g.matchAll(fragments)];
+if(!extracted.length){failures++;continue}
+for(let j=0;j<extracted.length;j++){
+const match=extracted[j],rawName=match[1].trim();
+const name=rawName.replace(/\s*-\s*(?:R\$\s*)?\d+(?:[.,]\d{1,2})?\s*$/,'').trim().replace(/\s+/g,' ');
+const qty=Number(match[2]),val=Number(match[3].replace(/,/g,''));
+if(!name||!cap||!qty||!Number.isFinite(val)){failures++;continue}
+parsed.push({id:'ts-'+i+'-'+j+'-'+dt.replaceAll('/','')+'-'+cap.slice(0,8).replace(/\W/g,''),date:iso,cap,name,qty,val,location:(r[locIx]||'').trim()});
+}
+}
+if(!parsed.length)throw Error('Nenhum brinde válido encontrado.');
+const existing=new Set(data.costs.map(x=>x.id));let added=0;
+for(const c of parsed){
+if(existing.has(c.id))continue;
+let p=data.partners.find(x=>x.name.toUpperCase()===c.name.toUpperCase());
+if(!p){p={id:newId(),name:c.name,category:'Outros',contact:'',notes:'Importado de TSExplorer'};data.partners.push(p)}
+let cap=data.captadores.find(x=>x.name.toUpperCase()===c.cap.toUpperCase());
+if(!cap){cap={id:newId(),name:c.cap,team:'OUTRA'};data.captadores.push(cap)}
+data.costs.push({id:c.id,date:c.date,partnerId:p.id,captadorId:cap.id,category:p.category||'Outros',description:'Brinde TSExplorer'+(c.location?' • Local: '+c.location:''),qty:c.qty,unit:Math.round(c.val/c.qty*100000)/100000,status:'pendente',source:'TSExplorer',totalOriginal:c.val});
+existing.add(c.id);added++;
+}
+if(added)save();else render();
+alert('Importação concluída! '+added+' brindes adicionados; '+(parsed.length-added)+' já importados; '+failures+' itens não interpretados; '+skipped+' atendimentos sem brinde ou inválidos.\nImportante: status financeiro importado como PENDENTE por falta de confirmação de pagamento. Confira os valores antes de realizar fechamento. Nenhum dado pessoal dos casais foi importado.');
+}catch(err){alert('Falha ao importar CSV: '+err.message)}
+e.target.value='';
+};
+
 render();
 })();
 </script></body></html>
