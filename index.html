@@ -109,10 +109,10 @@ const extracted=[...g.matchAll(fragments)];
 if(!extracted.length){failures++;continue}
 for(let j=0;j<extracted.length;j++){
 const match=extracted[j],rawName=match[1].trim();
-const name=rawName.replace(/\s*-\s*R\$\s*[\d.,]+\s*$/i,'').trim().replace(/\s+/g,' ');
+const name=rawName.replace(/\s*-\s*R\$\s*[\d.,]+\s*$/i,'').trim().replace(/\s+/g,' '); const partnerName=/^RB SOUVENIRES/i.test(name)?'RB Souvenires':name; const variant=/^RB SOUVENIRES/i.test(rawName)?rawName:name;
 const qty=Number(match[2]),val=Number(match[3].includes(',')?match[3].replace(/\./g,'').replace(',','.'):match[3]);
 if(!name||!cap||!qty||!Number.isFinite(val)){failures++;continue}
-const sold=Number((r[col('Valor vendido')]||'0').replace(/\./g,'').replace(',','.'));const cancelled=(r[col('Status do contrato')]||'').toUpperCase().includes('CANCELAD');parsed.push({id:'ts-'+i+'-'+j+'-'+dt.replaceAll('/','')+'-'+cap.slice(0,8).replace(/\W/g,''),date:iso,cap,name,qty,val,location:(r[locIx]||'').trim(),couple:j===0?1:0,sale:j===0&&sold>0&&!cancelled?1:0,cancelled:j===0&&sold>0&&cancelled?1:0});
+const sold=Number((r[col('Valor vendido')]||'0').replace(/\./g,'').replace(',','.'));const cancelled=(r[col('Status do contrato')]||'').toUpperCase().includes('CANCELAD');parsed.push({id:'ts-'+i+'-'+j+'-'+dt.replaceAll('/','')+'-'+cap.slice(0,8).replace(/\W/g,''),date:iso,cap,name:partnerName,variant,qty,val,location:(r[locIx]||'').trim(),couple:j===0?1:0,sale:j===0&&sold>0&&!cancelled?1:0,cancelled:j===0&&sold>0&&cancelled?1:0});
 }
 }
 if(!parsed.length)throw Error('Nenhum brinde válido encontrado.');
@@ -123,7 +123,7 @@ let p=data.partners.find(x=>x.name.toUpperCase()===c.name.toUpperCase());
 if(!p){p={id:newId(),name:c.name,category:'Outros',contact:'',notes:'Importado de TSExplorer'};data.partners.push(p)}
 let cap=data.captadores.find(x=>x.name.toUpperCase()===c.cap.toUpperCase());
 if(!cap){cap={id:newId(),name:c.cap,team:'OUTRA'};data.captadores.push(cap)}
-data.costs.push({id:c.id,date:c.date,partnerId:p.id,captadorId:cap.id,category:p.category||'Outros',description:'Brinde TSExplorer'+(c.location?' • Local: '+c.location:''),qty:c.qty,unit:Math.round(c.val/c.qty*100000)/100000,status:'pendente',source:'TSExplorer',totalOriginal:c.val,couple:c.couple,sale:c.sale,cancelled:c.cancelled});
+data.costs.push({id:c.id,date:c.date,partnerId:p.id,captadorId:cap.id,category:p.category||'Outros',description:(c.variant||'Brinde TSExplorer')+(c.location?' • Local: '+c.location:''),qty:c.qty,unit:Math.round(c.val/c.qty*100000)/100000,status:'pendente',source:'TSExplorer',totalOriginal:c.val,couple:c.couple,sale:c.sale,cancelled:c.cancelled});
 existing.add(c.id);added++;
 }
 if(added)save();else render();
