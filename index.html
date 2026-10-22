@@ -21,7 +21,7 @@
 </div></section>
 <section id="painel">
 <div class="metrics"><div class="metric"><span>💰 Custo total</span><b id="mTotal">R$ 0,00</b><small>Período filtrado</small></div><div class="metric"><span>🎁 Brindes lançados</span><b id="mQty">0</b><small>Quantidade</small></div><div class="metric"><span>🧾 Valor pendente</span><b id="mPending">R$ 0,00</b><small>A pagar</small></div><div class="metric"><span>🏪 Parceiros utilizados</span><b id="mPartners">0</b><small>Estabelecimentos</small></div></div>
-<div class="twocol"><div class="panel"><h2>Custo por estabelecimento</h2><div id="chartPartners" class="empty">Sem lançamentos</div></div><div class="panel"><h2>Custo por captador</h2><div id="chartCaptadores" class="empty">Sem lançamentos</div></div></div>
+<div class="metrics"><div class="metric"><span>👫 Casais com brindes</span><b id="mCouples">0</b><small>Atendimentos com brinde</small></div><div class="metric"><span>🧮 Custo por casal</span><b id="mCPC">R$ 0,00</b><small>Custo / casais</small></div><div class="metric"><span>✅ Vendas ativas</span><b id="mSales">0</b><small>Contratos não cancelados</small></div><div class="metric"><span>📈 Custo por venda</span><b id="mCPS">R$ 0,00</b><small>Custo / vendas ativas</small></div></div><div class="twocol"><div class="panel"><h2>Custo por estabelecimento</h2><div id="chartPartners" class="empty">Sem lançamentos</div></div><div class="panel"><h2>Custo por captador</h2><div id="chartCaptadores" class="empty">Sem lançamentos</div></div></div>
 <div class="panel"><div class="row"><h2>Histórico de lançamentos</h2><span class="tag" id="countTag">0 registros</span></div><div class="scroll"><table><thead><tr><th>Data</th><th>Estabelecimento</th><th>Captador</th><th>Categoria / descrição</th><th>Qtd.</th><th>Unitário</th><th>Total</th><th>Status</th><th>Ações</th></tr></thead><tbody id="history"></tbody></table></div></div>
 </section>
 <section id="lancar" class="hidden"><div class="panel"><h2>Novo lançamento de custo</h2><form id="costForm"><div class="form-grid">
@@ -51,7 +51,7 @@ function render(){
 const pf=$('filterPartner').value,cf=$('filterCaptador').value,cp=$('costPartner').value,cc=$('costCaptador').value;
 $('filterPartner').innerHTML=opts(data.partners,'Todos');$('filterCaptador').innerHTML=opts(data.captadores,'Todos');$('costPartner').innerHTML=opts(data.partners,'Selecione');$('costCaptador').innerHTML=opts(data.captadores,'Selecione');
 $('filterPartner').value=pf;$('filterCaptador').value=cf;$('costPartner').value=cp;$('costCaptador').value=cc;
-const items=filtered(),total=items.reduce((s,c)=>s+c.qty*c.unit,0),qty=items.reduce((s,c)=>s+Number(c.qty),0),pending=items.filter(c=>c.status==='pendente').reduce((s,c)=>s+c.qty*c.unit,0);
+const items=filtered(),total=items.reduce((s,c)=>s+c.qty*c.unit,0),qty=items.reduce((s,c)=>s+Number(c.qty),0),pending=items.filter(c=>c.status==='pendente').reduce((s,c)=>s+c.qty*c.unit,0),couples=items.reduce((s,c)=>s+(Number(c.couple)||0),0),sales=items.reduce((s,c)=>s+(Number(c.sale)||0),0); $('mCouples').textContent=couples.toLocaleString('pt-BR');$('mCPC').textContent=couples?money(total/couples):'—';$('mSales').textContent=sales.toLocaleString('pt-BR');$('mCPS').textContent=sales?money(total/sales):'—';
 $('mTotal').textContent=money(total);$('mQty').textContent=qty.toLocaleString('pt-BR');$('mPending').textContent=money(pending);$('mPartners').textContent=new Set(items.map(c=>c.partnerId)).size;$('countTag').textContent=items.length+' registros';
 graph('chartPartners',items,'partners');graph('chartCaptadores',items,'captadores');
 $('history').innerHTML=items.length?[...items].sort((a,b)=>b.date.localeCompare(a.date)).map(c=>'<tr><td>'+esc(c.date.split('-').reverse().join('/'))+'</td><td>'+esc(nameOf('partners',c.partnerId))+'</td><td>'+esc(nameOf('captadores',c.captadorId))+'</td><td>'+esc(c.category)+'<br><span class="muted">'+esc(c.description)+'</span></td><td>'+c.qty+'</td><td>'+money(c.unit)+'</td><td><b>'+money(c.qty*c.unit)+'</b></td><td>'+esc(c.status)+'</td><td><button class="btn secondary tiny" data-status="'+esc(c.id)+'">Alterar</button> <button class="btn danger tiny" data-delete="'+esc(c.id)+'">Excluir</button></td></tr>').join(''):'<tr><td colspan="9" class="empty">Nenhum lançamento para os filtros escolhidos.</td></tr>';
@@ -71,7 +71,7 @@ if(b.dataset.removeId){const type=b.dataset.removeType,id=b.dataset.removeId,use
 });
 const download=(name,contents,type)=>{const a=document.createElement('a'),u=URL.createObjectURL(new Blob([contents],{type}));a.href=u;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(u),1500)};
 $('backup').onclick=()=>download('aureon-brindes-backup-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(data,null,2),'application/json');
-$('exportCSV').onclick=()=>{const rows=[['Data','Estabelecimento','Captador','Equipe','Categoria','Descrição','Quantidade','Valor unitário','Total','Situação'],...filtered().map(c=>[c.date,nameOf('partners',c.partnerId),nameOf('captadores',c.captadorId),data.captadores.find(x=>x.id===c.captadorId)?.team||'',c.category,c.description,c.qty,c.unit,c.qty*c.unit,c.status])];download('aureon-brindes-'+($('month').value||'todos')+'.csv','\ufeff'+rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n'),'text/csv;charset=utf-8')};
+$('exportCSV').onclick=()=>{const rows=[['Data','Estabelecimento','Captador','Equipe','Categoria','Descrição','Quantidade','Valor unitário','Total','Situação','Casal','Venda ativa','Venda cancelada'],...filtered().map(c=>[c.date,nameOf('partners',c.partnerId),nameOf('captadores',c.captadorId),data.captadores.find(x=>x.id===c.captadorId)?.team||'',c.category,c.description,c.qty,c.unit,c.qty*c.unit,c.status,c.couple||0,c.sale||0,c.cancelled||0])];download('aureon-brindes-'+($('month').value||'todos')+'.csv','\ufeff'+rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(';')).join('\r\n'),'text/csv;charset=utf-8')};
 $('importBtn').onclick=()=>$('importFile').click();
 $('importFile').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{const p=JSON.parse(await file.text());if(!p||!['partners','captadores','costs'].every(k=>Array.isArray(p[k])))throw Error('Formato inválido');if(!confirm('Este backup substituirá TODOS os dados locais atuais. Continuar?'))return;data=p;save()}catch(err){alert('Arquivo de backup inválido: '+err.message)}e.target.value=''};
 
@@ -110,9 +110,9 @@ if(!extracted.length){failures++;continue}
 for(let j=0;j<extracted.length;j++){
 const match=extracted[j],rawName=match[1].trim();
 const name=rawName.replace(/\s*-\s*(?:R\$\s*)?\d+(?:[.,]\d{1,2})?\s*$/,'').trim().replace(/\s+/g,' ');
-const qty=Number(match[2]),val=Number(match[3].replace(/,/g,''));
+const qty=Number(match[2]),val=Number(match[3].includes(',')?match[3].replace(/\./g,'').replace(',','.'):match[3]);
 if(!name||!cap||!qty||!Number.isFinite(val)){failures++;continue}
-parsed.push({id:'ts-'+i+'-'+j+'-'+dt.replaceAll('/','')+'-'+cap.slice(0,8).replace(/\W/g,''),date:iso,cap,name,qty,val,location:(r[locIx]||'').trim()});
+const sold=Number((r[col('Valor vendido')]||'0').replace(/\./g,'').replace(',','.'));const cancelled=(r[col('Status do contrato')]||'').includes('CANCELADO');parsed.push({id:'ts-'+i+'-'+j+'-'+dt.replaceAll('/','')+'-'+cap.slice(0,8).replace(/\W/g,''),date:iso,cap,name,qty,val,location:(r[locIx]||'').trim(),couple:j===0?1:0,sale:j===0&&sold>0&&!cancelled?1:0,cancelled:j===0&&sold>0&&cancelled?1:0});
 }
 }
 if(!parsed.length)throw Error('Nenhum brinde válido encontrado.');
@@ -123,11 +123,11 @@ let p=data.partners.find(x=>x.name.toUpperCase()===c.name.toUpperCase());
 if(!p){p={id:newId(),name:c.name,category:'Outros',contact:'',notes:'Importado de TSExplorer'};data.partners.push(p)}
 let cap=data.captadores.find(x=>x.name.toUpperCase()===c.cap.toUpperCase());
 if(!cap){cap={id:newId(),name:c.cap,team:'OUTRA'};data.captadores.push(cap)}
-data.costs.push({id:c.id,date:c.date,partnerId:p.id,captadorId:cap.id,category:p.category||'Outros',description:'Brinde TSExplorer'+(c.location?' • Local: '+c.location:''),qty:c.qty,unit:Math.round(c.val/c.qty*100000)/100000,status:'pendente',source:'TSExplorer',totalOriginal:c.val});
+data.costs.push({id:c.id,date:c.date,partnerId:p.id,captadorId:cap.id,category:p.category||'Outros',description:'Brinde TSExplorer'+(c.location?' • Local: '+c.location:''),qty:c.qty,unit:Math.round(c.val/c.qty*100000)/100000,status:'pendente',source:'TSExplorer',totalOriginal:c.val,couple:c.couple,sale:c.sale,cancelled:c.cancelled});
 existing.add(c.id);added++;
 }
 if(added)save();else render();
-alert('Importação concluída! '+added+' brindes adicionados; '+(parsed.length-added)+' já importados; '+failures+' itens não interpretados; '+skipped+' atendimentos sem brinde ou inválidos.\nImportante: status financeiro importado como PENDENTE por falta de confirmação de pagamento. Confira os valores antes de realizar fechamento. Nenhum dado pessoal dos casais foi importado.');
+$('month').value='';render();alert('Importação concluída! '+added+' brindes adicionados; '+(parsed.length-added)+' já importados; '+failures+' itens não interpretados; '+skipped+' atendimentos sem brinde ou inválidos.\nImportante: status financeiro importado como PENDENTE por falta de confirmação de pagamento. Confira os valores antes de realizar fechamento. Nenhum dado pessoal dos casais foi importado.');
 }catch(err){alert('Falha ao importar CSV: '+err.message)}
 e.target.value='';
 };
