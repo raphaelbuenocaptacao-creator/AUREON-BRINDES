@@ -19,7 +19,7 @@
 <div><label for="filterCategory">Categoria de custo</label><select id="filterCategory"></select></div>
 <div><label for="filterStatus">Situação</label><select id="filterStatus"><option value="">Todas</option><option value="pendente">Pendente</option><option value="pago">Pago</option></select></div>
 </div></section>
-<section id="painel">
+<section id="painel"><div id="emptyHelp" class="notice hidden" style="border-color:#23ccbc;background:#1b3540;color:#e0fbf4"><strong>Seus dados ainda não foram carregados neste dispositivo.</strong> Clique em <strong>📂 Importar TSExplorer CSV</strong> no topo e selecione o relatório Document(20261022-215913).csv. O arquivo não é enviado automaticamente do ChatGPT para o navegador. Após a importação, esta tela exibirá os custos e os filtros por estabelecimento, captador e mês.</div>
 <div class="metrics"><div class="metric"><span>💰 Custo total</span><b id="mTotal">R$ 0,00</b><small>Período filtrado</small></div><div class="metric"><span>🎁 Brindes lançados</span><b id="mQty">0</b><small>Quantidade</small></div><div class="metric"><span>🧾 Valor pendente</span><b id="mPending">R$ 0,00</b><small>A pagar</small></div><div class="metric"><span>🏪 Parceiros utilizados</span><b id="mPartners">0</b><small>Estabelecimentos</small></div></div>
 <div class="metrics"><div class="metric"><span>👫 Casais com brindes</span><b id="mCouples">0</b><small>Atendimentos com brinde</small></div><div class="metric"><span>🧮 Custo por casal</span><b id="mCPC">R$ 0,00</b><small>Custo / casais</small></div><div class="metric"><span>✅ Vendas ativas</span><b id="mSales">0</b><small>Contratos não cancelados</small></div><div class="metric"><span>📈 Custo por venda</span><b id="mCPS">R$ 0,00</b><small>Custo / vendas ativas</small></div></div><div class="twocol"><div class="panel"><h2>Custo por estabelecimento</h2><div id="chartPartners" class="empty">Sem lançamentos</div></div><div class="panel"><h2>Custo por captador</h2><div id="chartCaptadores" class="empty">Sem lançamentos</div></div></div>
 <div class="panel"><div class="row"><h2>Histórico de lançamentos</h2><span class="tag" id="countTag">0 registros</span></div><div class="scroll"><table><thead><tr><th>Data</th><th>Estabelecimento</th><th>Captador</th><th>Categoria / descrição</th><th>Qtd.</th><th>Unitário</th><th>Total</th><th>Status</th><th>Ações</th></tr></thead><tbody id="history"></tbody></table></div></div>
@@ -51,7 +51,7 @@ function render(){
 const pf=$('filterPartner').value,cf=$('filterCaptador').value,cp=$('costPartner').value,cc=$('costCaptador').value;
 $('filterPartner').innerHTML=opts(data.partners,'Todos');$('filterCaptador').innerHTML=opts(data.captadores,'Todos');$('costPartner').innerHTML=opts(data.partners,'Selecione');$('costCaptador').innerHTML=opts(data.captadores,'Selecione');
 $('filterPartner').value=pf;$('filterCaptador').value=cf;$('costPartner').value=cp;$('costCaptador').value=cc;
-const items=filtered(),total=items.reduce((s,c)=>s+c.qty*c.unit,0),qty=items.reduce((s,c)=>s+Number(c.qty),0),pending=items.filter(c=>c.status==='pendente').reduce((s,c)=>s+c.qty*c.unit,0),couples=items.reduce((s,c)=>s+(Number(c.couple)||0),0),sales=items.reduce((s,c)=>s+(Number(c.sale)||0),0); $('mCouples').textContent=couples.toLocaleString('pt-BR');$('mCPC').textContent=couples?money(total/couples):'—';$('mSales').textContent=sales.toLocaleString('pt-BR');$('mCPS').textContent=sales?money(total/sales):'—';
+ $('emptyHelp').classList.toggle('hidden',data.costs.length>0);const items=filtered(),total=items.reduce((s,c)=>s+c.qty*c.unit,0),qty=items.reduce((s,c)=>s+Number(c.qty),0),pending=items.filter(c=>c.status==='pendente').reduce((s,c)=>s+c.qty*c.unit,0),couples=items.reduce((s,c)=>s+(Number(c.couple)||0),0),sales=items.reduce((s,c)=>s+(Number(c.sale)||0),0); $('mCouples').textContent=couples.toLocaleString('pt-BR');$('mCPC').textContent=couples?money(total/couples):'—';$('mSales').textContent=sales.toLocaleString('pt-BR');$('mCPS').textContent=sales?money(total/sales):'—';
 $('mTotal').textContent=money(total);$('mQty').textContent=qty.toLocaleString('pt-BR');$('mPending').textContent=money(pending);$('mPartners').textContent=new Set(items.map(c=>c.partnerId)).size;$('countTag').textContent=items.length+' registros';
 graph('chartPartners',items,'partners');graph('chartCaptadores',items,'captadores');
 $('history').innerHTML=items.length?[...items].sort((a,b)=>b.date.localeCompare(a.date)).map(c=>'<tr><td>'+esc(c.date.split('-').reverse().join('/'))+'</td><td>'+esc(nameOf('partners',c.partnerId))+'</td><td>'+esc(nameOf('captadores',c.captadorId))+'</td><td>'+esc(c.category)+'<br><span class="muted">'+esc(c.description)+'</span></td><td>'+c.qty+'</td><td>'+money(c.unit)+'</td><td><b>'+money(c.qty*c.unit)+'</b></td><td>'+esc(c.status)+'</td><td><button class="btn secondary tiny" data-status="'+esc(c.id)+'">Alterar</button> <button class="btn danger tiny" data-delete="'+esc(c.id)+'">Excluir</button></td></tr>').join(''):'<tr><td colspan="9" class="empty">Nenhum lançamento para os filtros escolhidos.</td></tr>';
@@ -109,14 +109,14 @@ const extracted=[...g.matchAll(fragments)];
 if(!extracted.length){failures++;continue}
 for(let j=0;j<extracted.length;j++){
 const match=extracted[j],rawName=match[1].trim();
-const name=rawName.replace(/\s*-\s*(?:R\$\s*)?\d+(?:[.,]\d{1,2})?\s*$/,'').trim().replace(/\s+/g,' ');
+const name=rawName.replace(/\s*-\s*R\$\s*[\d.,]+\s*$/i,'').trim().replace(/\s+/g,' ');
 const qty=Number(match[2]),val=Number(match[3].includes(',')?match[3].replace(/\./g,'').replace(',','.'):match[3]);
 if(!name||!cap||!qty||!Number.isFinite(val)){failures++;continue}
-const sold=Number((r[col('Valor vendido')]||'0').replace(/\./g,'').replace(',','.'));const cancelled=(r[col('Status do contrato')]||'').includes('CANCELADO');parsed.push({id:'ts-'+i+'-'+j+'-'+dt.replaceAll('/','')+'-'+cap.slice(0,8).replace(/\W/g,''),date:iso,cap,name,qty,val,location:(r[locIx]||'').trim(),couple:j===0?1:0,sale:j===0&&sold>0&&!cancelled?1:0,cancelled:j===0&&sold>0&&cancelled?1:0});
+const sold=Number((r[col('Valor vendido')]||'0').replace(/\./g,'').replace(',','.'));const cancelled=(r[col('Status do contrato')]||'').toUpperCase().includes('CANCELAD');parsed.push({id:'ts-'+i+'-'+j+'-'+dt.replaceAll('/','')+'-'+cap.slice(0,8).replace(/\W/g,''),date:iso,cap,name,qty,val,location:(r[locIx]||'').trim(),couple:j===0?1:0,sale:j===0&&sold>0&&!cancelled?1:0,cancelled:j===0&&sold>0&&cancelled?1:0});
 }
 }
 if(!parsed.length)throw Error('Nenhum brinde válido encontrado.');
-const existing=new Set(data.costs.map(x=>x.id));let added=0;
+if(parsed.length<100&&rows.length>1000)throw Error('Poucos brindes foram lidos. Verifique se o arquivo é o TSExplorer completo.');const existing=new Set(data.costs.map(x=>x.id));let added=0;
 for(const c of parsed){
 if(existing.has(c.id))continue;
 let p=data.partners.find(x=>x.name.toUpperCase()===c.name.toUpperCase());
